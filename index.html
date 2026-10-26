@@ -100,7 +100,7 @@ const $ = id => document.getElementById(id);
 let img = null, svgText = '';
 
 /* ============================================================
-   1. Utilidades de cor — tudo em CIELAB (perceptual)
+   1. Utilidades de cor (CIELAB)
    ============================================================ */
 const lum = c => 0.299*c.r + 0.587*c.g + 0.114*c.b;
 
@@ -133,10 +133,9 @@ function lab2rgb(L,a,b){
 const labD2 = (p,q) => { const a=p[0]-q[0], b=p[1]-q[1], c=p[2]-q[2]; return a*a+b*b+c*c; };
 
 /* ============================================================
-   2. Paleta: k-means++ em Lab + LUT de 15 bits + regras de tom
+   2. Paleta: k-means++ em Lab (Garantindo Preto e Branco)
    ============================================================ */
-function buildPalette(d, k, darkT, lightT){
-  /* --- histograma em cubos de 5 bits, guardando a cor média real do cubo --- */
+function buildPalette(d, k){
   const bins = new Map();
   const step = 4 * Math.max(1, Math.floor(d.length/4/400000));
   for(let i=0;i<d.length;i+=step){
@@ -149,20 +148,18 @@ function buildPalette(d, k, darkT, lightT){
   bins.forEach(b => {
     if(!b[3]) return;
     const r = b[0]/b[3], g = b[1]/b[3], bl = b[2]/b[3];
-    // peso sqrt(n): evita que áreas enormes (fundo branco) engulam cores raras
     const w = Math.sqrt(b[3]);
     pts.push({r, g, b:bl, lab: rgb2lab(r,g,bl), w});
   });
-  if(!pts.length) return {colors:[{r:255,g:255,b:255,a:255}], lut:new Uint8Array(32768)};
+  if(!pts.length) return [{r:255,g:255,b:255,a:255}];
 
   k = Math.max(1, Math.min(k, pts.length));
-
-  /* --- inicialização k-means++ ponderada --- */
   const C = [];
   let seed = 0;
   for(let i=1;i<pts.length;i++) if(pts[i].w > pts[seed].w) seed = i;
   C.push(pts[seed].lab.slice());
   const d2 = pts.map(p => labD2(p.lab, C[0]));
+  
   while(C.length < k){
     let tot = 0;
     for(let i=0;i<pts.length;i++){
@@ -176,7 +173,6 @@ function buildPalette(d, k, darkT, lightT){
     C.push(pts[idx].lab.slice());
   }
 
-  /* --- Lloyd (12 iterações) --- */
   for(let it=0; it<12; it++){
     const S = C.map(() => [0,0,0,0]);
     for(let i=0;i<pts.length;i++){
@@ -189,149 +185,122 @@ function buildPalette(d, k, darkT, lightT){
     S.forEach((s,j) => { if(s[3] > 0){ C[j][0]=s[0]/s[3]; C[j][1]=s[1]/s[3]; C[j][2]=s[2]/s[3]; } });
   }
 
-  /* --- converte de volta p/ RGB e remove duplicatas --- */
-  const colors = [], seen = new Set();
-  for(const c of C){
+  let colors = C.map(c => {
     const o = lab2rgb(c[0], c[1], c[2]);
-    const key = (o.r<<16) | (o.g<<8) | o.b;
-    if(seen.has(key)) continue;
+    return {r:o.r, g:o.g, b:o.b, a:255};
+  });
+
+  // Remove duplicatas
+  const seen = new Set();
+  colors = colors.filter(c => {
+    const key = (c.r<<16) | (c.g<<8) | c.b;
+    if(seen.has(key)) return false;
     seen.add(key);
-    colors.push({r:o.r, g:o.g, b:o.b, a:255});
-  }
-
-  /* --- LUT 5/5/5 bits com distância Lab --- */
-  const labC = colors.map(c => rgb2lab(c.r, c.g, c.b));
-  let di = 0, li = 0;
-  colors.forEach((c,j) => {
-    if(lum(c) < lum(colors[di])) di = j;
-    if(lum(c) > lum(colors[li])) li = j;
+    return true;
   });
 
-  const useDark  = darkT > 0;
-  const useLight = lightT > 0;
-  const darkCut  = darkT;
-  const lightCut = 255 - lightT;
-
-  // Escuros/claros "aceitáveis": em vez de forçar TODOS para uma única cor
-  // (o que pintava todos os contornos de marrom), sorteia só entre os tons da faixa.
-  const darkSet = [], lightSet = [];
-  colors.forEach((c,j) => {
-    const L = lum(c);
-    if(L <= darkCut)  darkSet.push(j);
-    if(L >= lightCut) lightSet.push(j);
-  });
-  if(!darkSet.length)  darkSet.push(di);
-  if(!lightSet.length) lightSet.push(li);
-
-  const lut = new Uint8Array(32768);
-  for(let key=0; key<32768; key++){
-    const r = ((key>>10)&31)*8+4, g = ((key>>5)&31)*8+4, b = (key&31)*8+4;
-    const L = 0.299*r + 0.587*g + 0.114*b;
-    const lab = rgb2lab(r,g,b);
-    let pool = null;
-    if(useDark  && L <= darkCut)  pool = darkSet;
-    else if(useLight && L >= lightCut) pool = lightSet;
-
-    let bi = 0, bv = Infinity;
-    if(pool){
-      for(let n=0;n<pool.length;n++){ const j = pool[n]; const v = labD2(lab, labC[j]); if(v < bv){ bv = v; bi = j; } }
-    } else {
-      for(let j=0;j<colors.length;j++){ const v = labD2(lab, labC[j]); if(v < bv){ bv = v; bi = j; } }
-    }
-    lut[key] = bi;
+  // Garante preto puro se a imagem tiver pixels escuros
+  let hasDarkPixels = false;
+  for(let i=0; i<d.length; i+=4) {
+    if(d[i] < 40 && d[i+1] < 40 && d[i+2] < 40) { hasDarkPixels = true; break; }
+  }
+  if (hasDarkPixels && !colors.some(c => c.r < 30 && c.g < 30 && c.b < 30)) {
+    colors.push({r: 0, g: 0, b: 0, a: 255});
   }
 
-  return {colors, lut};
+  // Garante branco puro para o fundo
+  if (!colors.some(c => c.r > 240 && c.g > 240 && c.b > 240)) {
+    colors.push({r: 255, g: 255, b: 255, a: 255});
+  }
+
+  return colors;
 }
 
 /* ============================================================
-   3. Quantização + limpeza morfológica das bordas
+   3. Mapeamento Direto (sem LUT) + Filtro de Maioria
    ============================================================ */
-function snapIdx(d, pal){
-  const n = d.length >> 2;
-  const idx = new Uint8Array(n);
-  const lut = pal.lut;
-  for(let i=0,p=0; p<n; p++, i+=4){
-    idx[p] = lut[((d[i]>>3)<<10) | ((d[i+1]>>3)<<5) | (d[i+2]>>3)];
-  }
-  return idx;
-}
-
-/* Filtro de maioria 3×3 sobre os ÍNDICES de cor.
-   Remove faixas de anti-alias de 1–2 px e pixels isolados. */
-function majority(idx, w, h, passes){
-  let src = idx, dst = new Uint8Array(idx.length);
-  const cnt = new Uint16Array(256);
-  const tv  = new Uint8Array(9);
-
-  for(let p=0; p<passes; p++){
-    for(let y=0; y<h; y++){
-      const row = y*w;
-      for(let x=0; x<w; x++){
-        const i = row + x, c = src[i];
-
-        // caminho rápido: interior de região uniforme
-        if(x>0 && x<w-1 && y>0 && y<h-1 &&
-           src[i-1]===c && src[i+1]===c && src[i-w]===c && src[i+w]===c){
-          dst[i] = c; continue;
-        }
-
-        let tl = 0;
-        for(let dy=-1; dy<=1; dy++){
-          const yy = y+dy; if(yy<0 || yy>=h) continue;
-          const base = yy*w;
-          for(let dx=-1; dx<=1; dx++){
-            const xx = x+dx; if(xx<0 || xx>=w) continue;
-            const v = src[base+xx];
-            if(cnt[v]===0) tv[tl++] = v;
-            cnt[v]++;
-          }
-        }
-        let bestC = c, bestN = 0;
-        for(let n=0; n<tl; n++){
-          const v = tv[n], q = cnt[v];
-          if(q > bestN || (q === bestN && v === c)){ bestN = q; bestC = v; }
-        }
-        for(let n=0; n<tl; n++) cnt[tv[n]] = 0;
-        dst[i] = bestC;
-      }
+function snapAndClean(d, colors, passes, w, h) {
+  const labColors = colors.map(c => rgb2lab(c.r, c.g, c.b));
+  const idx = new Uint8Array(w * h);
+  
+  // Mapeamento direto para a cor mais próxima em Lab
+  for (let i = 0, p = 0; p < w * h; i += 4, p++) {
+    const lab = rgb2lab(d[i], d[i+1], d[i+2]);
+    let bestIdx = 0, bestD = Infinity;
+    for (let j = 0; j < labColors.length; j++) {
+      const dist = labD2(lab, labColors[j]);
+      if (dist < bestD) { bestD = dist; bestIdx = j; }
     }
-    const t = src; src = dst; dst = t;
+    idx[p] = bestIdx;
   }
-  return src;
-}
 
-function paint(d, idx, colors){
-  for(let i=0,p=0; p<idx.length; p++, i+=4){
+  // Filtro de Maioria (Moda) para remover pixels isolados de anti-alias
+  if (passes > 0) {
+    let src = idx, dst = new Uint8Array(w * h);
+    const cnt = new Uint16Array(256);
+    for (let p = 0; p < passes; p++) {
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const i = y * w + x;
+          const c = src[i];
+          let bestC = c, maxCnt = 0;
+          for (let dy = -1; dy <= 1; dy++) {
+            const yy = y + dy;
+            if (yy < 0 || yy >= h) continue;
+            for (let dx = -1; dx <= 1; dx++) {
+              const xx = x + dx;
+              if (xx < 0 || xx >= w) continue;
+              cnt[src[yy * w + xx]]++;
+            }
+          }
+          for (let j = 0; j < colors.length; j++) {
+            if (cnt[j] > maxCnt) { maxCnt = cnt[j]; bestC = j; }
+            cnt[j] = 0;
+          }
+          dst[i] = bestC;
+        }
+      }
+      const t = src; src = dst; dst = t;
+    }
+    idx.set(src);
+  }
+
+  // Aplica as cores de volta
+  for (let i = 0, p = 0; p < w * h; i += 4, p++) {
     const c = colors[idx[p]];
     d[i] = c.r; d[i+1] = c.g; d[i+2] = c.b; d[i+3] = 255;
   }
 }
 
 /* ============================================================
-   4. Filtro de mediana 3×3 — mata o anti-alias na origem
+   4. Mediana 3×3
    ============================================================ */
-function median3(ctx, w, h){
-  const id = ctx.getImageData(0,0,w,h);
+function median3(ctx, w, h) {
+  const id = ctx.getImageData(0, 0, w, h);
   const d = id.data;
   const src = new Uint8ClampedArray(d);
   const v = new Uint8Array(9);
-
-  for(let y=1; y<h-1; y++){
-    const r0 = (y-1)*w, r1 = y*w, r2 = (y+1)*w;
-    for(let x=1; x<w-1; x++){
-      const o = (r1+x)*4;
-      for(let ch=0; ch<3; ch++){
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      for (let c = 0; c < 3; c++) {
+        const o = (y * w + x) * 4 + c;
         let t = 0;
-        for(let k=0;k<3;k++) v[t++] = src[(r0+x-1+k)*4+ch];
-        for(let k=0;k<3;k++) v[t++] = src[(r1+x-1+k)*4+ch];
-        for(let k=0;k<3;k++) v[t++] = src[(r2+x-1+k)*4+ch];
-        for(let a=1;a<9;a++){ const q=v[a]; let b=a-1; while(b>=0 && v[b]>q){ v[b+1]=v[b]; b--; } v[b+1]=q; }
-        d[o+ch] = v[4];
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            v[t++] = src[((y + dy) * w + (x + dx)) * 4 + c];
+          }
+        }
+        for (let a = 1; a < 9; a++) {
+          const tmp = v[a];
+          let b = a - 1;
+          while (b >= 0 && v[b] > tmp) { v[b + 1] = v[b]; b--; }
+          v[b + 1] = tmp;
+        }
+        d[o] = v[4];
       }
     }
   }
-  ctx.putImageData(id,0,0);
+  ctx.putImageData(id, 0, 0);
 }
 
 /* ============================================================
@@ -386,7 +355,7 @@ $('go').onclick = () => {
       const k  = +$('scale').value;
       const nw = img.naturalWidth, nh = img.naturalHeight;
 
-      /* --- 6.1 base em resolução nativa (limitada) + mediana --- */
+      // Base em resolução nativa (limitada) + mediana
       const baseMax = 1400;
       const bs = Math.min(1, baseMax / Math.max(nw, nh));
       const bw = Math.max(1, Math.round(nw*bs));
@@ -403,7 +372,7 @@ $('go').onclick = () => {
 
       if($('clean').checked) median3(bctx, bw, bh);
 
-      /* --- 6.2 alvo (ampliação limitada) --- */
+      // Alvo (ampliação limitada)
       const MAXS = 2000;
       let tw = Math.round(nw*k), th = Math.round(nh*k);
       const cap = Math.min(1, MAXS/Math.max(tw,th));
@@ -419,31 +388,26 @@ $('go').onclick = () => {
       ctx.fillRect(0,0,tw,th);
       ctx.drawImage(base, 0, 0, tw, th);
 
-      /* --- 6.3 paleta + quantização + limpeza --- */
+      // Paleta + Quantização + Limpeza
       const id  = ctx.getImageData(0,0,tw,th);
-      const pal = buildPalette(id.data, +$('colors').value, +$('dark').value, +$('light').value);
-
-      let idx = snapIdx(id.data, pal);
-
-      const eff = tw / nw;   // fator real de ampliação
-      // limpeza limitada pela ampliação: evita apagar traços finos em 1×
+      const colors = buildPalette(id.data, +$('colors').value);
+      
+      const eff = tw / nw;
       const passes = Math.min(+$('cleanup').value, Math.max(0, Math.floor(eff)));
-      if(passes > 0) idx = majority(idx, tw, th, passes);
-
-      paint(id.data, idx, pal.colors);
+      
+      snapAndClean(id.data, colors, passes, tw, th);
       ctx.putImageData(id, 0, 0);
 
-      /* --- 6.4 traçado vetorial --- */
+      // Traçado vetorial
       const q = +$('prec').value;
-      // tolerâncias escalam com a resolução, senão o vetor fica cheio de nós
       const tol = q * Math.max(1, eff*0.75);
 
       svgText = ImageTracer.imagedataToSVG(id, {
-        pal: pal.colors,
-        numberofcolors: pal.colors.length,
+        pal: colors,
+        numberofcolors: colors.length,
         colorsampling: 0,
         mincolorratio: 0,
-        blurradius: 0, blurdelta: 20,          // já limpamos antes: nada de borrar de novo
+        blurradius: 0, blurdelta: 20,
         pathomit: Math.max(0, Math.round(+$('omit').value * eff)),
         rightangleenhance: true,
         ltres: tol, qtres: tol,
@@ -456,7 +420,7 @@ $('go').onclick = () => {
       $('vec').innerHTML = svgText;
       show('vec');
       $('dSvg').disabled = $('dPdf').disabled = false;
-      status(`Pronto: ${pal.colors.length} cores · ${(svgText.length/1024).toFixed(0)} KB de vetor.`);
+      status(`Pronto: ${colors.length} cores · ${(svgText.length/1024).toFixed(0)} KB de vetor.`);
     }catch(err){
       console.error(err);
       status('Erro ao vetorizar: ' + err.message);
@@ -466,7 +430,7 @@ $('go').onclick = () => {
 };
 
 /* ============================================================
-   7. Exportação
+   7. Exportação (SVG e PDF)
    ============================================================ */
 function sized(){
   const m = svgText.match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/);
@@ -484,22 +448,31 @@ $('dSvg').onclick = () => {
   const s = svgText.replace('<svg ', `<svg width="${W}mm" height="${H}mm" shape-rendering="geometricPrecision" `);
   save(new Blob([s], {type:'image/svg+xml'}), 'vetor.svg');
 };
+
 $('dPdf').onclick = async () => {
   const {W,H} = sized();
-  const box = document.createElement('div');
-  box.style.cssText = 'position:absolute;left:-99999px;top:0';
-  box.innerHTML = svgText;
-  document.body.appendChild(box);
-  try{
+  let s = svgText;
+  
+  // Correção para o svg2pdf: garantir xmlns e dimensões
+  if (!s.includes('xmlns')) {
+    s = s.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ');
+  }
+  s = s.replace('<svg ', `<svg width="${W}mm" height="${H}mm" `);
+
+  const parser = new DOMParser();
+  const domDoc = parser.parseFromString(s, 'image/svg+xml');
+  const svgEl = domDoc.documentElement;
+
+  try {
     status('Gerando PDF…');
-    const doc = new window.jspdf.jsPDF({unit:'mm', format:[W,H], orientation: W > H ? 'l' : 'p'});
-    await doc.svg(box.firstElementChild, {x:0, y:0, width:W, height:H});
-    doc.save('vetor.pdf');
-    status('PDF salvo.');
-  }catch(err){
+    const pdf = new window.jspdf.jsPDF({unit:'mm', format:[W,H], orientation: W > H ? 'l' : 'p'});
+    await pdf.svg(svgEl, {x:0, y:0, width:W, height:H});
+    pdf.save('vetor.pdf');
+    status('PDF salvo com sucesso.');
+  } catch(err) {
+    console.error(err);
     status('Erro no PDF: ' + err.message);
   }
-  box.remove();
 };
 </script>
 </body>
