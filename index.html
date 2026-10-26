@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -170,43 +169,42 @@ footer{text-align:center;color:var(--muted);font-size:11px;padding:5px 15px 25px
    <h2>02 — Parâmetros</h2>
 
    <div class="field">
-    <label for="colors">Quantidade de cores <span id="colorsVal">16</span></label>
-    <input id="colors" type="range" min="2" max="32" value="16">
-    <div class="hint">Menos cores geram áreas mais simples. Mais cores preservam nuances, mas podem criar mais caminhos.</div>
+    <label for="colors">Quantidade de cores <span id="colorsVal">12</span></label>
+    <input id="colors" type="range" min="2" max="32" value="12">
+    <div class="hint">Menos cores geram áreas mais simples (estilo adesivo). Mais cores preservam nuances.</div>
    </div>
 
    <div class="field">
-    <label for="detail">Precisão dos contornos <span id="detailVal">1,5</span></label>
-    <input id="detail" type="range" min="0.5" max="5" step="0.5" value="1.5">
-    <div class="hint">Valores menores geralmente preservam mais detalhes e podem aumentar o tamanho do SVG.</div>
+    <label for="detail">Precisão dos contornos <span id="detailVal">1.0</span></label>
+    <input id="detail" type="range" min="0.1" max="5" step="0.1" value="1.0">
+    <div class="hint">Valores menores preservam detalhes e geram curvas mais precisas.</div>
    </div>
 
    <div class="field">
-    <label for="noise">Remoção de regiões pequenas <span id="noiseVal">8</span></label>
-    <input id="noise" type="range" min="0" max="80" value="8">
-    <div class="hint">Ignora regiões com poucos pixels. Aumentar demais pode apagar detalhes finos.</div>
+    <label for="noise">Remoção de ruído <span id="noiseVal">15</span></label>
+    <input id="noise" type="range" min="0" max="80" value="15">
+    <div class="hint">Ignora manchas e pontos soltos. Aumentar demais apaga detalhes finos.</div>
    </div>
 
    <div class="field">
-    <label for="threshold">Remover fundo claro <span id="thresholdVal">238</span></label>
-    <input id="threshold" type="range" min="0" max="255" value="238">
-    <div class="hint">Pixels próximos de branco tornam-se transparentes. Cuidado com partes brancas do próprio desenho.</div>
+    <label for="threshold">Corte do Fundo Branco <span id="thresholdVal">230</span></label>
+    <input id="threshold" type="range" min="0" max="255" value="230">
+    <div class="hint">Pixels mais claros que este valor se tornam 100% transparentes.</div>
    </div>
 
    <label class="check">
     <input id="removeBg" type="checkbox" checked>
-    <span><strong>Remover fundo branco ou quase branco</strong><br>Aplica transparência antes da vetorização.</span>
+    <span><strong>Remover fundo branco</strong><br>Evita halos e bordas serrilhadas.</span>
    </label>
 
    <label class="check">
     <input id="smooth" type="checkbox" checked>
-    <span><strong>Suavizar contornos</strong><br>Usa curvas e simplificação para reduzir o aspecto serrilhado.</span>
+    <span><strong>Suavizar contornos (Posterize)</strong><br>Aplica desfoque e curvas para evitar aspecto pixelado.</span>
    </label>
 
    <div class="field">
     <label for="width">Largura de exportação PNG (px)</label>
     <input id="width" type="number" min="256" max="12000" step="256" value="3520">
-    <div class="hint">A proporção original será preservada. Limite: 12.000 px.</div>
    </div>
 
    <button id="traceBtn" class="btn primary full" disabled>✦ Vetorizar imagem</button>
@@ -214,7 +212,7 @@ footer{text-align:center;color:var(--muted);font-size:11px;padding:5px 15px 25px
    <button id="resetBtn" class="btn light full">Restaurar parâmetros</button>
 
    <div class="note">
-    <strong>Importante:</strong> o SVG é vetorial. Aumentar o PNG de saída não recupera detalhes ausentes no original. A qualidade depende da imagem de entrada e dos parâmetros escolhidos.
+    <strong>Dica de Qualidade:</strong> Para obter o visual de "adesivo" com cores sólidas e sem ruídos brancos (como no Vectorizer.AI), reduza a quantidade de cores para 8 ou 12 e mantenha a remoção de ruído acima de 10.
    </div>
   </aside>
 
@@ -254,17 +252,13 @@ footer{text-align:center;color:var(--muted);font-size:11px;padding:5px 15px 25px
     <button class="btn dark" id="pdfBtn" disabled>⇩ PDF para impressão</button>
     <button class="btn light" id="previewBtn" disabled>↗ Abrir SVG</button>
    </div>
-
-   <p class="hint">
-    Para produção de chaveiros, adesivos ou impressão, prefira o SVG quando o fornecedor aceitar arquivos vetoriais. Confirme a escala física e as margens com a gráfica.
-   </p>
   </section>
  </div>
 </main>
 
-<footer>Vetorizador PRO · Processamento no navegador · SVG / PNG / PDF</footer>
+<footer>Vetorizador PRO · Processamento 100% no navegador · SVG / PNG / PDF</footer>
 
-<!-- Bibliotecas públicas. Requer internet para carregá-las. -->
+<!-- Bibliotecas via CDN -->
 <script src="https://cdn.jsdelivr.net/npm/imagetracerjs@1.2.6/imagetracer_v1.2.6.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
 
@@ -370,7 +364,7 @@ footer{text-align:center;color:var(--muted);font-size:11px;padding:5px 15px 25px
 
      $("traceBtn").disabled = false;
      enableExports(false);
-     say("Imagem carregada.");
+     say("Imagem carregada. Pronto para vetorizar.");
    };
 
    img.onerror = () => {
@@ -387,10 +381,11 @@ footer{text-align:center;color:var(--muted);font-size:11px;padding:5px 15px 25px
  });
 
  /*
-  * Pré-processamento:
+  * PRÉ-PROCESSAMENTO AVANÇADO (A Mágica acontece aqui)
   * 1. Desenha a imagem no Canvas.
-  * 2. Torna pixels claros transparentes, se solicitado.
-  * 3. Entrega os pixels ao ImageTracerJS.
+  * 2. Aplica desfoque leve para suavizar bordas (se ativado).
+  * 3. Cria um corte rígido (Hard Threshold) no fundo para eliminar
+  *    qualquer pixel semitransparente que cause halos brancos.
   */
  function getProcessedImageData() {
    const w = state.width;
@@ -398,9 +393,8 @@ footer{text-align:center;color:var(--muted);font-size:11px;padding:5px 15px 25px
 
    if(!w || !h) throw new Error("Imagem inválida.");
 
-   // Limita a memória usada no processamento.
-   // A imagem original continua intacta para a exportação.
-   const maxSide = 2200;
+   // Limita o tamanho para processamento rápido sem perder qualidade
+   const maxSide = 2000;
    const scale = Math.min(1, maxSide / Math.max(w,h));
    const pw = Math.max(1, Math.round(w * scale));
    const ph = Math.max(1, Math.round(h * scale));
@@ -409,11 +403,19 @@ footer{text-align:center;color:var(--muted);font-size:11px;padding:5px 15px 25px
    canvas.width = pw;
    canvas.height = ph;
 
-   const ctx = canvas.getContext("2d", {
-     willReadFrequently: true
-   });
+   const ctx = canvas.getContext("2d", { willReadFrequently: true });
+   
+   // Se a suavização estiver ligada, aplica um leve desfoque ANTES de ler os pixels.
+   // Isso remove o "ruído" da imagem original e ajuda o vetorizador a criar curvas limpas.
+   if ($("smooth").checked) {
+       ctx.filter = "blur(1.5px)"; 
+   }
+   
    ctx.clearRect(0,0,pw,ph);
    ctx.drawImage(state.image,0,0,pw,ph);
+   
+   // Reseta o filtro
+   ctx.filter = "none";
 
    const frame = ctx.getImageData(0,0,pw,ph);
    const d = frame.data;
@@ -421,26 +423,30 @@ footer{text-align:center;color:var(--muted);font-size:11px;padding:5px 15px 25px
    if($("removeBg").checked) {
      const threshold = Number($("threshold").value);
 
-     for(let i=0;i<d.length;i+=4) {
-       const r=d[i], g=d[i+1], b=d[i+2];
-       const min=Math.min(r,g,b);
-       const max=Math.max(r,g,b);
-       const brightness=(r+g+b)/3;
-       const spread=max-min;
+     for(let i=0; i < d.length; i += 4) {
+       const r = d[i];
+       const g = d[i+1];
+       const b = d[i+2];
+       const a = d[i+3];
+       
+       // Se o pixel for muito transparente, ignora
+       if (a < 10) continue;
 
-       // Preserva pixels coloridos e remove tons claros
-       // de baixa saturação. O limiar é ajustável.
-       if(brightness >= threshold && spread < 45) {
-         d[i+3]=0;
-       } else if(brightness > threshold-12 &&
-                 spread < 25) {
-         // Transição gradual para reduzir halos.
-         const amount = (threshold-brightness+12)/12;
-         d[i+3] = Math.round(d[i+3] *
-                              Math.max(0,Math.min(1,amount)));
+       const brightness = (r + g + b) / 3;
+       const min = Math.min(r, g, b);
+       const max = Math.max(r, g, b);
+       const spread = max - min;
+
+       // Lógica de Corte Rígido (Hard Threshold)
+       // Se é claro e não tem muita cor (é branco/cinza), removemos 100%
+       if (brightness >= threshold && spread < 35) {
+         d[i+3] = 0; // Totalmente transparente
+       } 
+       // Se está na borda do limiar, forçamos ser opaco para evitar halo
+       else if (brightness > threshold - 20 && spread < 35) {
+         d[i+3] = 255; // Totalmente opaco (corta a transição suave)
        }
      }
-     ctx.putImageData(frame,0,0);
    }
 
    return frame;
@@ -450,51 +456,45 @@ footer{text-align:center;color:var(--muted);font-size:11px;padding:5px 15px 25px
    if(!state.image || state.busy) return;
 
    if(typeof ImageTracer === "undefined") {
-     say("Biblioteca não carregada. Verifique a internet.",true);
+     say("Biblioteca não carregada. Verifique a internet.", true);
      return;
    }
 
    setBusy(true);
    say("Analisando cores e contornos…");
 
-   // Permite que a interface atualize antes do processamento.
    setTimeout(() => {
      try {
        const imageData = getProcessedImageData();
        const smooth = $("smooth").checked;
        const detail = Number($("detail").value);
 
+       // Configurações otimizadas para o estilo "Vectorizer.AI" / Adesivo
        const options = {
          numberofcolors: Number($("colors").value),
-         colorsampling: 2,
-         colorquantcycles: 3,
-         layering: 0,
-         pathomit: Number($("noise").value),
-         ltres: detail,
-         qtres: smooth ? Math.max(0.5,detail) : 2,
+         colorsampling: 2,       // Amostragem mais precisa de cores
+         colorquantcycles: 3,    // Melhor definição de paleta
+         layering: 0,            // 0 = Cortar formas umas nas outras (Evita sobreposição)
+         pathomit: Number($("noise").value), // Remove ruídos
+         ltres: detail,          // Precisão de linha
+         qtres: detail,          // Precisão de curva
          rightangleenhance: false,
-         linefilter: smooth,
+         linefilter: smooth,     // Suaviza cantos e linhas
          scale: 1,
-         roundcoords: smooth ? 1 : 2,
+         roundcoords: smooth ? 1 : 2, // Arredonda curvas para não pesar o arquivo
          viewbox: true,
          desc: false,
-         strokewidth: 0,
-         blurradius: 0,
+         strokewidth: 0,         // 0 = Apenas preenchimento (sem contornos extras)
+         blurradius: 0,          // Já aplicamos o blur no canvas acima
          blurdelta: 20
        };
 
-       // Conversão de pixels em caminhos SVG.
-       const result = ImageTracer.imagedataToSVG(
-         imageData, options
-       );
+       const result = ImageTracer.imagedataToSVG(imageData, options);
 
-       if(typeof result !== "string" ||
-          !result.includes("<svg")) {
+       if(typeof result !== "string" || !result.includes("<svg")) {
          throw new Error("A biblioteca não gerou um SVG válido.");
        }
 
-       // Mantém a proporção original como metadado de dimensão.
-       // O viewBox define a área vetorial escalável.
        state.svg = result;
        revoke(state.svgURL);
        state.svgURL = URL.createObjectURL(
@@ -504,40 +504,39 @@ footer{text-align:center;color:var(--muted);font-size:11px;padding:5px 15px 25px
        const img = new Image();
        img.onload = () => {
          $("resultArea").replaceChildren(img);
-         $("svgSize").textContent =
-           (new Blob([result]).size/1024).toFixed(1)+" KB";
+         $("svgSize").textContent = (new Blob([result]).size / 1024).toFixed(1) + " KB";
 
          const matches = result.match(/<path\b/g);
          $("paths").textContent = matches ? matches.length : "0";
 
          enableExports(true);
          setBusy(false);
-         say("Vetorização concluída.");
+         say("Vetorização concluída com sucesso.");
        };
        img.onerror = () => {
          setBusy(false);
-         say("O SVG foi gerado, mas a prévia falhou.",true);
+         say("O SVG foi gerado, mas a prévia falhou.", true);
        };
        img.src = state.svgURL;
 
      } catch(err) {
        console.error(err);
        setBusy(false);
-       say(err.message || "Erro durante a vetorização.",true);
+       say(err.message || "Erro durante a vetorização.", true);
      }
-   }, 40);
+   }, 50);
  }
 
- $("traceBtn").addEventListener("click",traceImage);
+ $("traceBtn").addEventListener("click", traceImage);
 
- $("resetBtn").addEventListener("click",() => {
-   $("colors").value=16;
-   $("detail").value=1.5;
-   $("noise").value=8;
-   $("threshold").value=238;
-   $("removeBg").checked=true;
-   $("smooth").checked=true;
-   $("width").value=3520;
+ $("resetBtn").addEventListener("click", () => {
+   $("colors").value = 12;
+   $("detail").value = 1.0;
+   $("noise").value = 15;
+   $("threshold").value = 230;
+   $("removeBg").checked = true;
+   $("smooth").checked = true;
+   $("width").value = 3520;
    updateLabels();
  });
 
@@ -564,16 +563,10 @@ footer{text-align:center;color:var(--muted);font-size:11px;padding:5px 15px 25px
    if(state.svgURL) window.open(state.svgURL,"_blank","noopener");
  });
 
- /*
-  * Renderiza o SVG num Canvas com resolução escolhida.
-  * O resultado PNG tem pixels reais na dimensão exportada.
-  */
  async function renderHighResolution() {
    if(!state.svg) throw new Error("Vetorize a imagem primeiro.");
 
-   const targetWidth=Math.max(256,Math.min(
-     12000,Number($("width").value)||3520
-   ));
+   const targetWidth=Math.max(256,Math.min(12000,Number($("width").value)||3520));
    $("width").value=targetWidth;
 
    const aspect=state.height/state.width;
@@ -614,9 +607,7 @@ footer{text-align:center;color:var(--muted);font-size:11px;padding:5px 15px 25px
    try {
      say("Renderizando PNG em alta resolução…");
      const canvas=await renderHighResolution();
-     const blob=await new Promise(resolve=>
-       canvas.toBlob(resolve,"image/png")
-     );
+     const blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/png"));
      if(!blob) throw new Error("Não foi possível gerar o PNG.");
      downloadBlob(blob,state.fileName+"_alta_resolucao.png");
      say("PNG exportado.");
@@ -625,10 +616,6 @@ footer{text-align:center;color:var(--muted);font-size:11px;padding:5px 15px 25px
    }
  });
 
- /*
-  * PDF em alta resolução: o desenho é rasterizado dentro
-  * do PDF. Para impressão vetorial, utilize o SVG.
-  */
  $("pdfBtn").addEventListener("click",async() => {
    try {
      if(!window.jspdf || !window.jspdf.jsPDF) {
