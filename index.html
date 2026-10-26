@@ -50,34 +50,34 @@ main{padding:24px;display:flex;flex-direction:column;gap:14px;min-width:0}
   <div id="drop" tabindex="0" role="button">Clique ou arraste a imagem aqui<br><small>JPG ou PNG</small></div>
   <input id="file" type="file" accept="image/*" hidden>
 
-  <div><label>Ampliar antes de vetorizar: <b id="vScale">2×</b></label>
-  <input id="scale" type="range" min="1" max="6" step="1" value="2"></div>
+  <div><label>Ampliar antes de vetorizar: <b id="vScale">3×</b></label>
+  <input id="scale" type="range" min="1" max="6" step="1" value="3"></div>
 
-  <div><label>Quantidade de cores: <b id="vColors">40</b></label>
-  <input id="colors" type="range" min="4" max="96" step="2" value="40"></div>
+  <div><label>Quantidade de cores: <b id="vColors">32</b></label>
+  <input id="colors" type="range" min="4" max="64" step="2" value="32"></div>
 
-  <div><label>Reforçar contornos escuros: <b id="vDark">60</b></label>
-  <input id="dark" type="range" min="0" max="120" step="5" value="60"></div>
+  <div><label>Reforçar contornos escuros: <b id="vDark">20</b></label>
+  <input id="dark" type="range" min="0" max="120" step="5" value="20"></div>
 
   <div><label>Preservar tons claros: <b id="vLight">10</b></label>
   <input id="light" type="range" min="0" max="40" step="1" value="10"></div>
 
-  <div><label>Limpeza de bordas: <b id="vCleanup">2</b></label>
-  <input id="cleanup" type="range" min="0" max="3" step="1" value="2"></div>
+  <div><label>Limpeza de bordas: <b id="vCleanup">1</b></label>
+  <input id="cleanup" type="range" min="0" max="3" step="1" value="1"></div>
 
-  <div><label>Remover manchas pequenas: <b id="vOmit">4</b></label>
-  <input id="omit" type="range" min="0" max="40" step="1" value="4"></div>
+  <div><label>Remover manchas pequenas: <b id="vOmit">5</b></label>
+  <input id="omit" type="range" min="0" max="40" step="1" value="5"></div>
 
-  <div><label class="chk"><input type="checkbox" id="clean" checked> Remover serrilhado (mediana 3×3)</label></div>
+  <div><label class="chk"><input type="checkbox" id="clean" checked> Suavizar texturas (Desfoque)</label></div>
 
   <div><label>Precisão das curvas</label>
-  <select id="prec"><option value="0.5">Alta (mais detalhes)</option><option value="1" selected>Normal</option><option value="2">Suave (menos nós)</option></select></div>
+  <select id="prec"><option value="1">Alta (mais detalhes)</option><option value="1.5" selected>Normal</option><option value="2.5">Suave (menos nós)</option></select></div>
 
   <div><label>Largura do arquivo final (cm)</label>
   <input id="cm" type="number" min="2" max="200" value="21"></div>
 
   <button id="go" disabled>Vetorizar imagem</button>
-  <div class="dl"><button id="dSvg" disabled>Baixar SVG</button><button id="dPdf" disabled>Baixar PDF</button></div>
+  <div class="dl"><button id="dSvg" disabled>Baixar SVG (Vetor)</button><button id="dPdf" disabled>Baixar PDF (Alta Res)</button></div>
 </aside>
 
 <main>
@@ -88,13 +88,12 @@ main{padding:24px;display:flex;flex-direction:column;gap:14px;min-width:0}
     <span id="status">Envie uma imagem para começar.</span>
   </div>
   <div class="stage" id="stage"><div class="empty" id="empty">Nenhuma imagem carregada.</div><img id="orig" alt="Imagem original" hidden><div id="vec" hidden></div></div>
-  <p class="hint">Dica: use 2× ou 3× de ampliação para preservar os contornos finos. A limpeza de bordas remove o anti-alias da foto, que é a principal causa de “sujeira” no vetor.</p>
+  <p class="hint">Dica: O "Desfoque" ajuda a remover a granulação de fotos e texturas, criando formas lisas. O arquivo SVG é 100% vetorial, o PDF é uma versão em altíssima resolução para facilitar a impressão.</p>
 </main>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/imagetracerjs@1.2.6/imagetracer_v1.2.6.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/svg2pdf.js/2.2.3/svg2pdf.umd.min.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 let img = null, svgText = '';
@@ -173,7 +172,7 @@ function buildPalette(d, k){
     C.push(pts[idx].lab.slice());
   }
 
-  for(let it=0; it<12; it++){
+  for(let it=0; it<10; it++){
     const S = C.map(() => [0,0,0,0]);
     for(let i=0;i<pts.length;i++){
       const p = pts[i];
@@ -190,7 +189,6 @@ function buildPalette(d, k){
     return {r:o.r, g:o.g, b:o.b, a:255};
   });
 
-  // Remove duplicatas
   const seen = new Set();
   colors = colors.filter(c => {
     const key = (c.r<<16) | (c.g<<8) | c.b;
@@ -199,16 +197,14 @@ function buildPalette(d, k){
     return true;
   });
 
-  // Garante preto puro se a imagem tiver pixels escuros
+  // Garante preto e branco puros
   let hasDarkPixels = false;
   for(let i=0; i<d.length; i+=4) {
-    if(d[i] < 40 && d[i+1] < 40 && d[i+2] < 40) { hasDarkPixels = true; break; }
+    if(d[i] < 30 && d[i+1] < 30 && d[i+2] < 30) { hasDarkPixels = true; break; }
   }
-  if (hasDarkPixels && !colors.some(c => c.r < 30 && c.g < 30 && c.b < 30)) {
+  if (hasDarkPixels && !colors.some(c => c.r < 20 && c.g < 20 && c.b < 20)) {
     colors.push({r: 0, g: 0, b: 0, a: 255});
   }
-
-  // Garante branco puro para o fundo
   if (!colors.some(c => c.r > 240 && c.g > 240 && c.b > 240)) {
     colors.push({r: 255, g: 255, b: 255, a: 255});
   }
@@ -217,13 +213,12 @@ function buildPalette(d, k){
 }
 
 /* ============================================================
-   3. Mapeamento Direto (sem LUT) + Filtro de Maioria
+   3. Quantização Direta + Filtro de Maioria
    ============================================================ */
 function snapAndClean(d, colors, passes, w, h) {
   const labColors = colors.map(c => rgb2lab(c.r, c.g, c.b));
   const idx = new Uint8Array(w * h);
   
-  // Mapeamento direto para a cor mais próxima em Lab
   for (let i = 0, p = 0; p < w * h; i += 4, p++) {
     const lab = rgb2lab(d[i], d[i+1], d[i+2]);
     let bestIdx = 0, bestD = Infinity;
@@ -234,7 +229,6 @@ function snapAndClean(d, colors, passes, w, h) {
     idx[p] = bestIdx;
   }
 
-  // Filtro de Maioria (Moda) para remover pixels isolados de anti-alias
   if (passes > 0) {
     let src = idx, dst = new Uint8Array(w * h);
     const cnt = new Uint16Array(256);
@@ -265,7 +259,6 @@ function snapAndClean(d, colors, passes, w, h) {
     idx.set(src);
   }
 
-  // Aplica as cores de volta
   for (let i = 0, p = 0; p < w * h; i += 4, p++) {
     const c = colors[idx[p]];
     d[i] = c.r; d[i+1] = c.g; d[i+2] = c.b; d[i+3] = 255;
@@ -273,7 +266,7 @@ function snapAndClean(d, colors, passes, w, h) {
 }
 
 /* ============================================================
-   4. Mediana 3×3
+   4. Mediana 3×3 (filtro espacial)
    ============================================================ */
 function median3(ctx, w, h) {
   const id = ctx.getImageData(0, 0, w, h);
@@ -355,8 +348,8 @@ $('go').onclick = () => {
       const k  = +$('scale').value;
       const nw = img.naturalWidth, nh = img.naturalHeight;
 
-      // Base em resolução nativa (limitada) + mediana
-      const baseMax = 1400;
+      // Base + Mediana
+      const baseMax = 1200; // Resolução base um pouco menor para limpar ruído
       const bs = Math.min(1, baseMax / Math.max(nw, nh));
       const bw = Math.max(1, Math.round(nw*bs));
       const bh = Math.max(1, Math.round(nh*bs));
@@ -372,7 +365,7 @@ $('go').onclick = () => {
 
       if($('clean').checked) median3(bctx, bw, bh);
 
-      // Alvo (ampliação limitada)
+      // Alvo (ampliação)
       const MAXS = 2000;
       let tw = Math.round(nw*k), th = Math.round(nh*k);
       const cap = Math.min(1, MAXS/Math.max(tw,th));
@@ -388,31 +381,33 @@ $('go').onclick = () => {
       ctx.fillRect(0,0,tw,th);
       ctx.drawImage(base, 0, 0, tw, th);
 
-      // Paleta + Quantização + Limpeza
+      // Quantização
       const id  = ctx.getImageData(0,0,tw,th);
       const colors = buildPalette(id.data, +$('colors').value);
       
       const eff = tw / nw;
+      // A limpeza é limitada para não destruir detalhes finos
       const passes = Math.min(+$('cleanup').value, Math.max(0, Math.floor(eff)));
       
       snapAndClean(id.data, colors, passes, tw, th);
       ctx.putImageData(id, 0, 0);
 
-      // Traçado vetorial
+      // Traçado
       const q = +$('prec').value;
-      const tol = q * Math.max(1, eff*0.75);
+      const tol = q * Math.max(1, eff*0.5);
 
       svgText = ImageTracer.imagedataToSVG(id, {
         pal: colors,
         numberofcolors: colors.length,
         colorsampling: 0,
         mincolorratio: 0,
-        blurradius: 0, blurdelta: 20,
+        blurradius: 1, // Suaviza levemente as bordas antes de traçar (evita linhas serrilhadas)
+        blurdelta: 20,
         pathomit: Math.max(0, Math.round(+$('omit').value * eff)),
         rightangleenhance: true,
         ltres: tol, qtres: tol,
         roundcoords: 2,
-        strokewidth: 1,
+        strokewidth: 0, // Sem contorno extra, apenas preenchimento
         viewbox: true,
         desc: false
       });
@@ -420,17 +415,17 @@ $('go').onclick = () => {
       $('vec').innerHTML = svgText;
       show('vec');
       $('dSvg').disabled = $('dPdf').disabled = false;
-      status(`Pronto: ${colors.length} cores · ${(svgText.length/1024).toFixed(0)} KB de vetor.`);
+      status(`Pronto: ${colors.length} cores · ${(svgText.length/1024).toFixed(0)} KB`);
     }catch(err){
       console.error(err);
-      status('Erro ao vetorizar: ' + err.message);
+      status('Erro: ' + err.message);
     }
     $('go').disabled = false;
   }, 60);
 };
 
 /* ============================================================
-   7. Exportação (SVG e PDF)
+   7. Exportação (SVG e PDF à prova de falhas)
    ============================================================ */
 function sized(){
   const m = svgText.match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/);
@@ -443,6 +438,7 @@ function save(blob, name){
   a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
+
 $('dSvg').onclick = () => {
   const {W,H} = sized();
   const s = svgText.replace('<svg ', `<svg width="${W}mm" height="${H}mm" shape-rendering="geometricPrecision" `);
@@ -451,28 +447,43 @@ $('dSvg').onclick = () => {
 
 $('dPdf').onclick = async () => {
   const {W,H} = sized();
-  let s = svgText;
+  status('Gerando PDF…');
   
-  // Correção para o svg2pdf: garantir xmlns e dimensões
-  if (!s.includes('xmlns')) {
-    s = s.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ');
-  }
-  s = s.replace('<svg ', `<svg width="${W}mm" height="${H}mm" `);
+  // Para garantir que o PDF funcione no celular, rasterizamos o SVG em alta resolução.
+  // Na impressão, a diferença para o vetor é imperceptível e evita travamentos.
+  const scale = 12; // 12 pixels por mm = ~300 DPI (padrão de impressão)
+  const canvas = document.createElement('canvas');
+  canvas.width = W * scale;
+  canvas.height = H * scale;
+  const ctx = canvas.getContext('2d');
+  
+  // Fundo branco
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  const parser = new DOMParser();
-  const domDoc = parser.parseFromString(s, 'image/svg+xml');
-  const svgEl = domDoc.documentElement;
+  // Carrega SVG no Canvas
+  const img = new Image();
+  const svgBlob = new Blob([svgText], {type: 'image/svg+xml;charset=utf-8'});
+  const url = URL.createObjectURL(svgBlob);
 
-  try {
-    status('Gerando PDF…');
-    const pdf = new window.jspdf.jsPDF({unit:'mm', format:[W,H], orientation: W > H ? 'l' : 'p'});
-    await pdf.svg(svgEl, {x:0, y:0, width:W, height:H});
-    pdf.save('vetor.pdf');
-    status('PDF salvo com sucesso.');
-  } catch(err) {
-    console.error(err);
-    status('Erro no PDF: ' + err.message);
-  }
+  img.onload = () => {
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    URL.revokeObjectURL(url);
+    
+    try {
+      const pdf = new window.jspdf.jsPDF({unit:'mm', format:[W,H], orientation: W > H ? 'l' : 'p'});
+      pdf.addImage(canvas.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, W, H);
+      pdf.save('vetor.pdf');
+      status('PDF salvo com sucesso.');
+    } catch(err) {
+      console.error(err);
+      status('Erro ao salvar PDF: ' + err.message);
+    }
+  };
+  img.onerror = () => {
+    status('Erro ao converter SVG. Tente baixar o SVG.');
+  };
+  img.src = url;
 };
 </script>
 </body>
